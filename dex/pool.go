@@ -15,7 +15,9 @@ func identifyDEX(owner solana.PublicKey) types.DEX {
 	switch owner {
 	case constants.RaydiumAMMV4:
 		return types.RaydiumV4
-	case constants.PumpFunProgramId:
+	case constants.PumpFunProgramId: // bonding curve program
+		return types.PumpFunDEX
+	case constants.PumpFunAMMProgramId: // AMM program
 		return types.PumpFunDEX
 	case constants.OrcaWhirlpool:
 		return types.Orca
@@ -24,26 +26,53 @@ func identifyDEX(owner solana.PublicKey) types.DEX {
 	}
 }
 
-func GetPoolInfo(ctx context.Context, poolAdress string, rpc *rpc.Client) error {
+func GetPoolInfo(ctx context.Context, poolAddress string, client *rpc.Client) (types.PoolInfo, error) {
+	poolAddressPubkey := solana.MustPublicKeyFromBase58(poolAddress)
 
-	poolAddressPubkey := solana.MustPublicKeyFromBase58(poolAdress)
-
-	accountInfo, err := rpc.GetAccountInfo(ctx, poolAddressPubkey)
+	accountInfo, err := client.GetAccountInfo(ctx, poolAddressPubkey)
 	if err != nil {
-		return err
+		return types.PoolInfo{}, err
+	}
+	if accountInfo == nil || accountInfo.Value == nil {
+		return types.PoolInfo{}, fmt.Errorf("account not found")
 	}
 
+	data := accountInfo.Value.Data.GetBinary()
 	owner := accountInfo.Value.Owner
+
+	fmt.Println(owner)
 
 	dexType := identifyDEX(owner)
 
-	fmt.Println(dexType)
+	switch dexType {
+	case types.RaydiumV4:
+		return ParsePoolInfo(types.RaydiumV4, data)
 
-	return nil
+	case types.Orca:
+		return ParsePoolInfo(types.Orca, data)
+
+	case types.PumpFunDEX:
+		// parsePumpFun detects bonding curve vs AMM via discriminator.
+		// For bonding curve: pass mint + poolAddress as extras.
+		// For AMM: extras are ignored, everything is read from data.
+		return ParsePoolInfo(types.PumpFunDEX, data, poolAddressPubkey)
+
+	default:
+		return types.PoolInfo{}, fmt.Errorf("unknown DEX for owner %s", owner)
+	}
 }
 
-func getMintDecimals(ctx context.Context, rpc *rpc.Client, mint solana.PublicKey) (uint8, error) {
-	info, err := rpc.GetAccountInfo(ctx, mint)
+func ParsePoolInfo(dex types.DEX, data []byte, extra ...solana.PublicKey) (types.PoolInfo, error) {
+	switch dex {
+	case types.PumpFunDEX:
+		return parsePumpFun(data, extra...)
+	default:
+		return types.PoolInfo{}, fmt.Errorf("unknown DEX: %d", dex)
+	}
+}
+
+func getMintDecimals(ctx context.Context, client *rpc.Client, mint solana.PublicKey) (uint8, error) {
+	info, err := client.GetAccountInfo(ctx, mint)
 	if err != nil {
 		return 0, err
 	}
@@ -60,23 +89,32 @@ func isQuoteToken(mint solana.PublicKey) bool {
 	return mint == constants.USDC || mint == constants.USDT || mint == constants.SOL
 }
 
-func getPrice(ctx context.Context, rpc *rpc.Client, pool types.PoolInfo) (float64, error) {
-	baseRes, err := rpc.GetTokenAccountBalance(ctx, pool.BaseVault, "confirmed")
+func GetTokenPrice(ctx context.Context, client *rpc.Client, pool types.PoolInfo) (float64, error) {
+	baseRes, err := client.GetTokenAccountBalance(ctx, pool.BaseVault, rpc.CommitmentConfirmed)
 	if err != nil {
 		return 0, err
 	}
 
-	quoteRes, err := rpc.GetTokenAccountBalance(ctx, pool.QuoteVault, "confirmed")
+	quoteRes, err := client.GetTokenAccountBalance(ctx, pool.QuoteVault, rpc.CommitmentConfirmed)
 	if err != nil {
 		return 0, err
 	}
 
-	baseAmount, _ := strconv.ParseFloat(baseRes.Value.UiAmountString, 64)
-	quoteAmount, _ := strconv.ParseFloat(quoteRes.Value.UiAmountString, 64)
+	baseAmount, err := strconv.ParseFloat(baseRes.Value.UiAmountString, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid base vault amount: %w", err)
+	}
+	quoteAmount, err := strconv.ParseFloat(quoteRes.Value.UiAmountString, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid quote vault amount: %w", err)
+	}
+
+	if baseAmount == 0 || quoteAmount == 0 {
+		return 0, fmt.Errorf("vault balance is zero")
+	}
 
 	if isQuoteToken(pool.BaseMint) {
-		return (baseAmount / quoteAmount), nil
-	} else {
-		return (quoteAmount / baseAmount), nil
+		return baseAmount / quoteAmount, nil
 	}
+	return quoteAmount / baseAmount, nil
 }
