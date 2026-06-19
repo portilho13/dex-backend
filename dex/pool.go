@@ -11,6 +11,11 @@ import (
 	"github.com/portilho13/dex-backend/types"
 )
 
+type PoolResult struct {
+	Info types.PoolInfo
+	DEX  types.DEX
+}
+
 func identifyDEX(owner solana.PublicKey) types.DEX {
 	switch owner {
 	case constants.RaydiumAMMV4:
@@ -26,44 +31,52 @@ func identifyDEX(owner solana.PublicKey) types.DEX {
 	}
 }
 
-func GetPoolInfo(ctx context.Context, poolAddress string, client *rpc.Client) (types.PoolInfo, error) {
-	poolAddressPubkey := solana.MustPublicKeyFromBase58(poolAddress)
+func GetPoolInfo(ctx context.Context, poolAddress string, client *rpc.Client) (PoolResult, error) {
+	poolAddressPubkey, err := solana.PublicKeyFromBase58(poolAddress)
+	if err != nil {
+		return PoolResult{}, fmt.Errorf("invalid pool address: %w", err)
+	}
 
 	accountInfo, err := client.GetAccountInfo(ctx, poolAddressPubkey)
 	if err != nil {
-		return types.PoolInfo{}, err
+		return PoolResult{}, err
 	}
 	if accountInfo == nil || accountInfo.Value == nil {
-		return types.PoolInfo{}, fmt.Errorf("account not found")
+		return PoolResult{}, fmt.Errorf("account not found")
 	}
 
 	data := accountInfo.Value.Data.GetBinary()
 	owner := accountInfo.Value.Owner
 
-	fmt.Println(owner)
-
 	dexType := identifyDEX(owner)
+
+	var info types.PoolInfo
 
 	switch dexType {
 	case types.RaydiumV4:
-		return ParsePoolInfo(types.RaydiumV4, data)
+		info, err = ParsePoolInfo(types.RaydiumV4, data)
 
 	case types.Orca:
-		return ParsePoolInfo(types.Orca, data)
+		info, err = ParsePoolInfo(types.Orca, data)
 
 	case types.PumpFunDEX:
-		// parsePumpFun detects bonding curve vs AMM via discriminator.
-		// For bonding curve: pass mint + poolAddress as extras.
-		// For AMM: extras are ignored, everything is read from data.
-		return ParsePoolInfo(types.PumpFunDEX, data, poolAddressPubkey)
+		info, err = ParsePoolInfo(types.PumpFunDEX, data, poolAddressPubkey)
 
 	default:
-		return types.PoolInfo{}, fmt.Errorf("unknown DEX for owner %s", owner)
+		return PoolResult{}, fmt.Errorf("unknown DEX for owner %s", owner)
 	}
+
+	if err != nil {
+		return PoolResult{}, err
+	}
+
+	return PoolResult{Info: info, DEX: dexType}, nil
 }
 
 func ParsePoolInfo(dex types.DEX, data []byte, extra ...solana.PublicKey) (types.PoolInfo, error) {
 	switch dex {
+	case types.RaydiumV4:
+		return parseRaydiumV4(data)
 	case types.PumpFunDEX:
 		return parsePumpFun(data, extra...)
 	default:

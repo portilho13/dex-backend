@@ -1,32 +1,41 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log"
+	"net/http"
+	"os"
 
 	"github.com/gagliardetto/solana-go/rpc"
-	"github.com/portilho13/dex-backend/dex"
+	"github.com/portilho13/dex-backend/api"
+	"github.com/portilho13/dex-backend/cache"
+	"github.com/portilho13/dex-backend/conn"
+	"github.com/portilho13/dex-backend/geckoterminal"
+	"github.com/portilho13/dex-backend/price"
 )
 
 func main() {
-	fmt.Println("Test")
-
-	client := rpc.New("https://mainnet.helius-rpc.com/?api-key=7e293735-eb88-4947-88a2-2c28ce5e1edd")
-
-	address := "ARj9PskkTNp6HJKDR5mtvYUhhAUJmezNC6zbDTARDqs7"
-
-	poolInfo, err := dex.GetPoolInfo(context.TODO(), address, client)
-	if err != nil {
-		log.Fatal(err)
+	heliusKey := os.Getenv("HELIUS_API_KEY")
+	if heliusKey == "" {
+		log.Fatal("HELIUS_API_KEY is not set")
 	}
 
-	fmt.Println(poolInfo)
+	rpcClient := rpc.New("https://mainnet.helius-rpc.com/?api-key=" + heliusKey)
+	geckoClient := geckoterminal.NewClient()
+	solPrice := price.NewSolPrice()
+	apiCache := cache.New()
 
-	price, err := dex.GetTokenPrice(context.TODO(), client, poolInfo)
-	if err != nil {
-		log.Fatal(err)
+	manager := conn.NewPoolManager(rpcClient, solPrice)
+
+	http.Handle("/ws", conn.NewWebSocketHandler(manager))
+	http.Handle("/ohlcv", api.NewOHLCVHandler(geckoClient, apiCache))
+	http.Handle("/pool-info", api.NewPoolInfoHandler(geckoClient, apiCache))
+	http.Handle("/trades", api.NewTradesHandler(geckoClient, apiCache))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
 	}
 
-	fmt.Println(price)
+	log.Printf("listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
