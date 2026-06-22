@@ -20,7 +20,6 @@ var (
 	pumpFunTokenDecimals uint8 = 6
 )
 
-// PumpFun AMM pool layout offsets (after 8-byte discriminator)
 const (
 	pumpAMMBaseMintOffset   = 43
 	pumpAMMQuoteMintOffset  = 75
@@ -48,14 +47,6 @@ func parsePumpFun(data []byte, extra ...solana.PublicKey) (types.PoolInfo, error
 	}
 }
 
-// parsePumpFunBondingCurve handles bonding curve accounts.
-// Requires extra[0] = poolAddress (the bonding curve PDA you fetched).
-// The mint is derived from it via FindProgramAddress seed reversal — actually
-// we derive the token vault from poolAddress + mint, so mint must still be known.
-// Pass extra[0]=mint, extra[1]=poolAddress, OR just extra[0]=poolAddress if
-// you want to derive the mint separately.
-//
-// Simplest: pass extra[0]=mint, extra[1]=poolAddress.
 func parsePumpFunBondingCurve(data []byte, extra ...solana.PublicKey) (types.PoolInfo, error) {
 	if len(data) < pumpBondingCurveMinLen {
 		return types.PoolInfo{}, fmt.Errorf("pumpfun bonding curve: data too short (%d < %d)", len(data), pumpBondingCurveMinLen)
@@ -82,8 +73,6 @@ func parsePumpFunBondingCurve(data []byte, extra ...solana.PublicKey) (types.Poo
 	}, nil
 }
 
-// parsePumpFunAMM handles the newer PumpFun AMM pool accounts.
-// Everything is read directly from the account data — no extras needed.
 func parsePumpFunAMM(data []byte) (types.PoolInfo, error) {
 	if len(data) < pumpAMMMinLen {
 		return types.PoolInfo{}, fmt.Errorf("pumpfun amm: data too short (%d < %d)", len(data), pumpAMMMinLen)

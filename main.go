@@ -10,6 +10,7 @@ import (
 	"github.com/portilho13/dex-backend/cache"
 	"github.com/portilho13/dex-backend/conn"
 	"github.com/portilho13/dex-backend/geckoterminal"
+	"github.com/portilho13/dex-backend/helius"
 	"github.com/portilho13/dex-backend/price"
 )
 
@@ -24,7 +25,25 @@ func main() {
 	solPrice := price.NewSolPrice()
 	apiCache := cache.New()
 
-	manager := conn.NewPoolManager(rpcClient, solPrice)
+	var manager *conn.PoolManager
+
+	txSub := helius.NewTxSubscriber(heliusKey, func(poolAddress string, trade helius.Trade) {
+		for _, pool := range manager.ActivePools() {
+			msg := conn.OutgoingMessage{
+				Type:      "trade",
+				Pool:      pool,
+				Kind:      trade.Kind,
+				VolumeBase: trade.AmountOut,
+				VolumeSOL: trade.AmountIn,
+				TxHash:    trade.Signature,
+				Maker:     trade.Maker,
+				Timestamp: trade.Timestamp.UnixMilli(),
+			}
+			manager.Broadcast(pool, msg)
+		}
+	})
+
+	manager = conn.NewPoolManager(rpcClient, solPrice, txSub)
 
 	http.Handle("/ws", conn.NewWebSocketHandler(manager))
 	http.Handle("/ohlcv", api.NewOHLCVHandler(geckoClient, apiCache))

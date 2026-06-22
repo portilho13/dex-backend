@@ -41,7 +41,7 @@ func (h *PoolInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	details, err := h.gecko.GetPoolDetails(address)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		writeGeckoError(w, err)
 		return
 	}
 

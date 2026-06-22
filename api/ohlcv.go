@@ -51,7 +51,7 @@ func (h *OHLCVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	candles, err := h.gecko.GetOHLCV(address, aggregate, timeframe)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		writeGeckoError(w, err)
 		return
 	}
 

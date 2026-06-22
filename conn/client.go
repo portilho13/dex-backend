@@ -8,7 +8,7 @@ import (
 )
 
 type Client struct {
-	send    chan PriceTick
+	send    chan OutgoingMessage
 	conn    *websocket.Conn
 	manager *PoolManager
 	pools   map[string]struct{}
@@ -16,7 +16,7 @@ type Client struct {
 
 func NewClient(conn *websocket.Conn, manager *PoolManager) *Client {
 	return &Client{
-		send:    make(chan PriceTick, 64),
+		send:    make(chan OutgoingMessage, 128),
 		conn:    conn,
 		manager: manager,
 		pools:   make(map[string]struct{}),
@@ -59,14 +59,7 @@ func (c *Client) ReadLoop() {
 }
 
 func (c *Client) WriteLoop() {
-	for tick := range c.send {
-		msg := OutgoingMessage{
-			Type:      "price",
-			Pool:      tick.Pool,
-			Price:     tick.Price,
-			Timestamp: tick.Timestamp.UnixMilli(),
-		}
-
+	for msg := range c.send {
 		data, err := json.Marshal(msg)
 		if err != nil {
 			log.Printf("write: marshal error: %v", err)

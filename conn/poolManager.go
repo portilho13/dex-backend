@@ -13,17 +13,24 @@ import (
 	"github.com/portilho13/dex-backend/price"
 )
 
+type TxSubscriber interface {
+	Subscribe(poolAddress string)
+	Unsubscribe(poolAddress string)
+}
+
 type PoolManager struct {
 	rpc      *rpc.Client
 	solPrice *price.SolPrice
+	txSub    TxSubscriber
 	pools    map[string]*PoolSubscription
 	mu       sync.RWMutex
 }
 
-func NewPoolManager(rpc *rpc.Client, solPrice *price.SolPrice) *PoolManager {
+func NewPoolManager(rpc *rpc.Client, solPrice *price.SolPrice, txSub TxSubscriber) *PoolManager {
 	return &PoolManager{
 		rpc:      rpc,
 		solPrice: solPrice,
+		txSub:    txSub,
 		pools:    make(map[string]*PoolSubscription),
 	}
 }
@@ -37,6 +44,9 @@ func (pm *PoolManager) Subscribe(poolAddress string, client *Client) {
 		ps := newPoolSubscription(cancel)
 		pm.pools[poolAddress] = ps
 		go pm.poll(ctx, poolAddress)
+		if pm.txSub != nil {
+			pm.txSub.Subscribe(poolAddress)
+		}
 	}
 
 	pm.pools[poolAddress].AddClient(client)
@@ -56,10 +66,13 @@ func (pm *PoolManager) Unsubscribe(poolAddress string, client *Client) {
 	if ps.ClientCount() == 0 {
 		ps.cancel()
 		delete(pm.pools, poolAddress)
+		if pm.txSub != nil {
+			pm.txSub.Unsubscribe(poolAddress)
+		}
 	}
 }
 
-func (pm *PoolManager) broadcast(poolAddress string, tick PriceTick) {
+func (pm *PoolManager) Broadcast(poolAddress string, msg OutgoingMessage) {
 	pm.mu.RLock()
 	ps, exists := pm.pools[poolAddress]
 	pm.mu.RUnlock()
@@ -73,10 +86,21 @@ func (pm *PoolManager) broadcast(poolAddress string, tick PriceTick) {
 
 	for client := range ps.clients {
 		select {
-		case client.send <- tick:
+		case client.send <- msg:
 		default:
 		}
 	}
+}
+
+func (pm *PoolManager) ActivePools() []string {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	pools := make([]string, 0, len(pm.pools))
+	for addr := range pm.pools {
+		pools = append(pools, addr)
+	}
+	return pools
 }
 
 func isSOLQuote(poolInfo dex.PoolResult) bool {
@@ -122,13 +146,14 @@ func (pm *PoolManager) poll(ctx context.Context, poolAddress string) {
 				}
 			}
 
-			tick := PriceTick{
+			msg := OutgoingMessage{
+				Type:      "price",
 				Pool:      poolAddress,
 				Price:     tokenPrice,
-				Timestamp: time.Now(),
+				Timestamp: time.Now().UnixMilli(),
 			}
 
-			pm.broadcast(poolAddress, tick)
+			pm.Broadcast(poolAddress, msg)
 		}
 	}
 }

@@ -41,7 +41,7 @@ func (h *TradesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	trades, err := h.gecko.GetTrades(address)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		writeGeckoError(w, err)
 		return
 	}
 
