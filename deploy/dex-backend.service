@@ -1,0 +1,15 @@
+[Unit]
+Description=Dex Backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/dex
+ExecStart=/opt/dex/dex-backend
+EnvironmentFile=/opt/dex/.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
