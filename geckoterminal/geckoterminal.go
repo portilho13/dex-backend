@@ -124,7 +124,9 @@ type poolResponse struct {
 			BaseTokenPriceUSD  string `json:"base_token_price_usd"`
 			FDVInUSD           string `json:"fdv_usd"`
 			MarketCapUSD       string `json:"market_cap_usd"`
-			PriceChangeH24     string `json:"price_change_percentage"`
+			PriceChangeH24     struct {
+				H24 string `json:"h24"`
+			} `json:"price_change_percentage"`
 			VolumeH24          struct {
 				H24 string `json:"h24"`
 			} `json:"volume_usd"`
@@ -199,7 +201,7 @@ func (c *Client) GetPoolDetails(poolAddress string) (*PoolDetails, error) {
 		FDV:            fdv,
 		MarketCap:      mcap,
 		TotalSupply:    totalSupply,
-		PriceChange24h: result.Data.Attributes.PriceChangeH24,
+		PriceChange24h: result.Data.Attributes.PriceChangeH24.H24,
 		Volume24h:      result.Data.Attributes.VolumeH24.H24,
 		Liquidity:      result.Data.Attributes.ReserveUSD,
 	}

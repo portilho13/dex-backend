@@ -51,6 +51,11 @@ func (h *OHLCVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	candles, err := h.gecko.GetOHLCV(address, aggregate, timeframe)
 	if err != nil {
+		if stale, ok := h.cache.GetStale(key); ok {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(stale)
+			return
+		}
 		writeGeckoError(w, err)
 		return
 	}

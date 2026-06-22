@@ -41,6 +41,11 @@ func (h *PoolInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	details, err := h.gecko.GetPoolDetails(address)
 	if err != nil {
+		if stale, ok := h.cache.GetStale(key); ok {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(stale)
+			return
+		}
 		writeGeckoError(w, err)
 		return
 	}

@@ -17,7 +17,6 @@ type Cache struct {
 
 func New() *Cache {
 	c := &Cache{items: make(map[string]entry)}
-	go c.cleanup()
 	return c
 }
 
@@ -32,6 +31,17 @@ func (c *Cache) Get(key string) (any, bool) {
 	return e.value, true
 }
 
+func (c *Cache) GetStale(key string) (any, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	e, ok := c.items[key]
+	if !ok {
+		return nil, false
+	}
+	return e.value, true
+}
+
 func (c *Cache) Set(key string, value any, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -39,21 +49,5 @@ func (c *Cache) Set(key string, value any, ttl time.Duration) {
 	c.items[key] = entry{
 		value:     value,
 		expiresAt: time.Now().Add(ttl),
-	}
-}
-
-func (c *Cache) cleanup() {
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		c.mu.Lock()
-		now := time.Now()
-		for k, e := range c.items {
-			if now.After(e.expiresAt) {
-				delete(c.items, k)
-			}
-		}
-		c.mu.Unlock()
 	}
 }

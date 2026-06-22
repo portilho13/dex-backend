@@ -41,6 +41,11 @@ func (h *TradesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	trades, err := h.gecko.GetTrades(address)
 	if err != nil {
+		if stale, ok := h.cache.GetStale(key); ok {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(stale)
+			return
+		}
 		writeGeckoError(w, err)
 		return
 	}

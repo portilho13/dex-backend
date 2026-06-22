@@ -141,9 +141,10 @@ func (pm *PoolManager) poll(ctx context.Context, poolAddress string) {
 
 			if solQuote {
 				solUSD := pm.solPrice.USD()
-				if solUSD > 0 {
-					tokenPrice = tokenPrice * solUSD
+				if solUSD <= 0 {
+					continue
 				}
+				tokenPrice = tokenPrice * solUSD
 			}
 
 			msg := OutgoingMessage{
