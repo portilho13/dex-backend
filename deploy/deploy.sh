@@ -25,7 +25,11 @@ rm -rf /var/www/dex/frontend/*
 cp -r dist/* /var/www/dex/frontend/
 
 echo "=== Setting up Nginx ==="
-cp "$BACKEND_DIR/deploy/nginx.conf" /etc/nginx/sites-available/dex
+if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+    cp "$BACKEND_DIR/deploy/nginx.conf" /etc/nginx/sites-available/dex
+else
+    cp "$BACKEND_DIR/deploy/nginx-initial.conf" /etc/nginx/sites-available/dex
+fi
 ln -sf /etc/nginx/sites-available/dex /etc/nginx/sites-enabled/dex
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
@@ -34,6 +38,9 @@ systemctl reload nginx
 echo "=== Setting up SSL ==="
 if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
     certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email admin@$DOMAIN --redirect
+    cp "$BACKEND_DIR/deploy/nginx.conf" /etc/nginx/sites-available/dex
+    nginx -t
+    systemctl reload nginx
 fi
 
 echo "=== Setting up systemd service ==="

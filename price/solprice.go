@@ -22,7 +22,7 @@ type coingeckoResponse struct {
 
 func NewSolPrice() *SolPrice {
 	sp := &SolPrice{
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
 	sp.fetch()
 	go sp.loop()
