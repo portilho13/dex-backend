@@ -125,7 +125,7 @@ func (pm *PoolManager) poll(ctx context.Context, poolAddress string) {
 
 	solQuote := isSOLQuote(poolInfo)
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	for {
