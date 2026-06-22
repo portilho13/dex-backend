@@ -2,6 +2,7 @@ package price
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -14,10 +15,8 @@ type SolPrice struct {
 	httpClient *http.Client
 }
 
-type jupiterResponse struct {
-	Data map[string]struct {
-		Price float64 `json:"price"`
-	} `json:"data"`
+type binanceResponse struct {
+	Price string `json:"price"`
 }
 
 func NewSolPrice() *SolPrice {
@@ -36,54 +35,26 @@ func (sp *SolPrice) USD() float64 {
 }
 
 func (sp *SolPrice) fetch() {
-	resp, err := sp.httpClient.Get("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112")
+	resp, err := sp.httpClient.Get("https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT")
 	if err != nil {
-		log.Printf("solprice: jupiter error: %v", err)
-		sp.fetchFallback()
+		log.Printf("solprice: fetch error: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 
-	var result jupiterResponse
+	var result binanceResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Printf("solprice: jupiter decode error: %v", err)
-		sp.fetchFallback()
+		log.Printf("solprice: decode error: %v", err)
 		return
 	}
 
-	if sol, ok := result.Data["So11111111111111111111111111111111111111112"]; ok && sol.Price > 0 {
+	var p float64
+	fmt.Sscanf(result.Price, "%f", &p)
+	if p > 0 {
 		sp.mu.Lock()
-		sp.price = sol.Price
+		sp.price = p
 		sp.mu.Unlock()
-		return
 	}
-
-	sp.fetchFallback()
-}
-
-type coingeckoResponse struct {
-	Solana struct {
-		USD float64 `json:"usd"`
-	} `json:"solana"`
-}
-
-func (sp *SolPrice) fetchFallback() {
-	resp, err := sp.httpClient.Get("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd")
-	if err != nil {
-		log.Printf("solprice: coingecko error: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	var result coingeckoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Printf("solprice: coingecko decode error: %v", err)
-		return
-	}
-
-	sp.mu.Lock()
-	sp.price = result.Solana.USD
-	sp.mu.Unlock()
 }
 
 func (sp *SolPrice) loop() {
